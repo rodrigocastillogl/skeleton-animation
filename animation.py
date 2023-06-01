@@ -1,55 +1,7 @@
-from numpy.core.fromnumeric import shape
 from prepare_data import data
 import numpy as np
 import matplotlib.pyplot as plt
-
-def quaternion_product(q1, q2):
-    """
-    Hamilton product of two quaternion arrays q1 and q2.
-    Input
-    -----
-        * q1, q2 : quaternions
-    Output
-    ------
-        * prod : quaterion product.
-    """
-
-    assert q1.shape == q2.shape
-    assert q1.shape[-1] == 4
-
-    M = q1.reshape((-1, 4, 1)) @ q2.reshape(-1, 1, 4)
-    
-    prod = np.zeros( (q1.shape[0], 4) )
-    prod[:,0] = M[:,0,0] - M[:,1,1] - M[:,2,2] - M[:,3,3]
-    prod[:,1] = M[:,0,1] + M[:,1,0] - M[:,2,3] + M[:,3,2]
-    prod[:,2] = M[:,0,2] + M[:,1,3] + M[:,2,0] - M[:,3,1]
-    prod[:,3] = M[:,0,3] - M[:,1,2] + M[:,2,1] + M[:,3,0]
-    
-    return prod
-
-def quaterion_rotation(q, v):
-    """
-    Rotation of a vector array v by a quaternion array q. 
-    Input
-    -----
-        * q : rotation quaternion
-        * v : vector
-    Output
-    ------
-        *  v_rot : rotated vector
-    """
-
-    qvec = q[:,1:]
-    qw = q[:,0]
-
-    print(qvec.shape)
-    print(qw.shape)
-
-    qv = np.cross( qvec, v)
-    qqv = np.cross( qvec, qv)
-
-    return v + 2 * ( qw * qv + qqv ) 
-
+from quaternion import *
 
 class Skeleton():
 
@@ -68,40 +20,64 @@ class Skeleton():
             None
         """
 
-        self.data = data
-        self.offsets = offsets
+        # save data
+        self.quaternions = data['quaternions'].copy()
+        self.trajectory = data['trajectory'].copy()
+
+        # - number of frames / number of joints -
+        self.n_frames = self.quaternions.shape[0]
+        self.n_joints = self.quaternions.shape[1]
+        # ---------------------------------------
+
+        # skeleton parameters
+        self.offsets = offsets.copy()
         self.parents = parents
         self.joints_left = joints_left
         self.joints_right = joints_right
+        self.compute_has_children()
+    
+    
+    def compute_has_children(self):
+        """
+        Compute has_children object attribute.
+        """
+        self.has_children = [False] * self.n_joints
+        for joint in self.parents:
+            self.has_children[joint] = True
+    
 
     def compute_positions(self):
         """
         Compute world positions with forward kinematics.
-        Input
-        -----
-            None
-        Output
-        ------
-            None
         """
 
-        n_frames = self.data.shape[0]
-        n_joints = self.data.shape[1]
+        n_frames = self.quaternions.shape[0]
+        n_joints = self.quaternions.shape[1]
 
-        self.positions = np.zeros( n_frames, n_joints , 3)
-        self.positions[:,0,:] = data['trajectory']
+        # world positions
+        p = np.zeros( (n_frames, n_joints, 3) )
 
-        for frame in range(n_frames):
-            
-            for joint in range(n_joints):
-                
-                parent  = self.parents[joint]
+        # the first joint is the root 
+        p[:,0,:] = self.trajectory
 
-                while parent != -1:
+        for joint in range(1,n_joints):
 
-                    parent = -1
+            parent  = self.parents[joint]
+            l = []
+            while parent != -1:
+                l.append(parent)
+                parent = self.parents[parent]
+            l = l[:-1]
 
-            
+            r = self.quaternions[:,0,:]
+            if len(r):
+                for i in reversed(l):
+                    r = quaternion_product( r, self.quaternions[:,i,:] )
+
+            p[:,joint,:] = p[:,self.parents[joint],:] + quaterion_rotation( r,
+                           np.repeat( np.expand_dims( self.offsets[joint,:], axis = 0),
+                           n_frames, axis = 0) )
+            print(self.parents[joint], joint)
 
 
 
@@ -137,6 +113,7 @@ offsets = [ [   0.      ,    0.      ,    0.      ],
             [   0.      ,    0.      ,   99.999888],
             [   0.      ,  137.499922,    0.      ],
             [   0.      ,    0.      ,    0.      ] ]
+offsets = np.array(offsets)
 
 parents = [ -1,  0,  1,  2,  3,  4,  0,  6,  7,  8, 
             9,  0, 11, 12, 13, 14, 12, 16, 17, 18,
@@ -159,5 +136,32 @@ for subject in data.keys():
     print()
 """
 
-x = data['S9']['directions_1']['quaternions'][:,0,:]
-y = data['S9']['directions_1']['quaternions'][:,1,:]
+s = Skeleton( data    = data['S1']['walking_1'],
+              offsets = offsets                   ,
+              parents = parents                   ,
+              joints_left  = joints_left          ,
+              joints_right = joints_right         )
+
+# s.compute_positions()
+
+# pp = s.positions[500,:,:]
+
+"""
+fig = plt.figure( figsize = (9,6) )
+ax = plt.axes( projection = '3d' )
+ax.set_xlabel('x'), ax.set_ylabel('-z'), ax.set_zlabel('y')
+ax.set_xlim([-1000, 1000]), ax.set_ylim([-1000, 1000]), ax.set_zlim([-1000, 1000])
+
+plt.plot(pp[0,0], -pp[0,2], pp[0,1], 'o', c = 'k', markersize = 3)
+
+for i in range(1, pp.shape[0]):
+    plt.plot( pp[i,0], -pp[i,2],
+	          pp[i,1], 'o', c  = 'k', markersize = 3)
+    plt.plot( [pp[parents[i], 0], pp[i, 0]]    ,
+	          [-pp[parents[i], 2], -pp[i, 2] ] ,
+	          [pp[parents[i], 1], pp[i, 1] ]   ,
+	          c  = 'k', linewidth = 0.5        )
+
+plt.tight_layout()
+plt.show()
+"""
