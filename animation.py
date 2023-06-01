@@ -1,10 +1,35 @@
+from numpy.core.fromnumeric import shape
 from prepare_data import data
 import numpy as np
 import matplotlib.pyplot as plt
 
+def quaternion_product(q1, q2):
+    """
+    Hamilton product of two quaternion arrays q1 and q2.
+    Input
+    -----
+        * q1, q2 : quaternions
+    Output
+    ------
+        * prod : quaterion product.
+    """
+
+    assert q1.shape == q2.shape
+    assert q1.shape[-1] == 4
+
+    M = q1.reshape((-1, 4, 1)) @ q2.reshape(-1, 1, 4)
+    
+    prod = np.zeros( (q1.shape[0], 4) )
+    prod[:,0] = M[:,0,0] - M[:,1,1] - M[:,2,2] - M[:,3,3]
+    prod[:,1] = M[:,0,1] + M[:,1,0] - M[:,2,3] + M[:,3,2]
+    prod[:,2] = M[:,0,2] + M[:,1,3] + M[:,2,0] - M[:,3,1]
+    prod[:,3] = M[:,0,3] - M[:,1,2] + M[:,2,1] + M[:,3,0]
+    
+    return prod
+
 def quaterion_rotation(q, v):
     """
-    Hamilton product of two quaternions.
+    Rotation of a vector array v by a quaternion array q. 
     Input
     -----
         * q : rotation quaternion
@@ -135,8 +160,4 @@ for subject in data.keys():
 """
 
 x = data['S9']['directions_1']['quaternions'][:,0,:]
-v = np.zeros( (x.shape[0], 3) )
-v = np.zeros( (x.shape[0], 3) )
-
-print(x.shape)
-print(v.shape)
+y = data['S9']['directions_1']['quaternions'][:,1,:]
