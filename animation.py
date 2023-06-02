@@ -36,6 +36,15 @@ class Skeleton():
         self.joints_right = joints_right
         self.compute_has_children()
     
+    def compute_children(self):
+        """
+        Compute children object attribute
+        """
+        self.children = [[]] * self.n_joints
+        for joint in range(self.n_joints):
+            self.children
+
+
     
     def compute_has_children(self):
         """
@@ -46,10 +55,27 @@ class Skeleton():
             self.has_children[joint] = True
     
 
+def compute_positions(self, root, q, p):
+    """
+    Recursive function to compute world positions.
+    Input
+    -----
+        * root : root index.
+        * q : root rotation as quaternion.
+        * p : root position as vector.
+    Output
+    ------
+        None
+    """
+
+    
+
+
+"""
     def compute_positions(self):
-        """
+        
         Compute world positions with forward kinematics.
-        """
+        
 
         n_frames = self.quaternions.shape[0]
         n_joints = self.quaternions.shape[1]
@@ -78,6 +104,7 @@ class Skeleton():
                            np.repeat( np.expand_dims( self.offsets[joint,:], axis = 0),
                            n_frames, axis = 0) )
             print(self.parents[joint], joint)
+"""
 
 
 
