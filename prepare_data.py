@@ -5,27 +5,7 @@ import numpy as np
 import zipfile
 import numpy as np
 from urllib.request import urlretrieve
-
-def expmap_to_quaternion(exp_map):
-
-    """
-    Convert axis-angle rotations (exponential maps) to quaternions.
-    Formula from "Practical Parameterization of Rotations Using the Exponential Map".
-    """
-    assert exp_map.shape[-1] == 3
-    
-    original_shape = exp_map.shape
-    exp_map = exp_map.reshape(-1, 3)
-    
-    # angle / norm
-    theta = np.linalg.norm(exp_map, axis = 1).reshape(-1, 1)
-
-    # quaternion
-    w = np.cos( 0.5 * theta ).reshape(-1, 1)
-    xyz = 0.5 * np.sinc(0.5 * theta/np.pi) * exp_map
-
-    return np.concatenate((w, xyz), axis = 1).reshape( original_shape[0] , -1, 4)
-
+from quaternion import expmap_to_quaternion, quaternion_fix
 
 def prepare_data():
 
@@ -78,6 +58,7 @@ def prepare_data():
             exp_map = arr[:,3:]
             exp_map = exp_map.reshape( exp_map.shape[0], -1 , 3)
             quaternions = expmap_to_quaternion( exp_map )
+            quaternions = quaternion_fix(quaternions)
 
             # add action to subject
             if action not in data[subject]:
@@ -88,4 +69,30 @@ def prepare_data():
 
     return data
 
+
+def print_data(data):
+    """
+    Print data created with prepare_data()
+    Input
+    -----
+        * data : dictionary dara -> subject -> action -> trajectory / quaternions
+    Output
+    ------
+        None
+    """
+
+    for subject in data.keys():
+        print('subject: ' + subject)
+        for action in data[subject].keys():
+            print('  action: ' + action )
+            print( '    trajectory: ', data[subject][action]['trajectory'].shape   ,
+                   '    quaternions: ', data[subject][action]['quaternions'].shape )
+        print()
+
+
 data = prepare_data()
+
+
+if __name__ == '__main__':
+    
+    print_data( data )

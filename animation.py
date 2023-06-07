@@ -1,111 +1,185 @@
-from prepare_data import data
 import numpy as np
 import matplotlib.pyplot as plt
-from quaternion import *
+from matplotlib.animation import FuncAnimation, writers
+from mpl_toolkits.mplot3d import Axes3D
 
-class Skeleton():
-
-    def __init__( self, data, offsets, parents, joints_left, joints_right ):
-        """
-        Constructor
-        Input
-        -----
-            * data: rotations data.
-            * offsets: skeleton offsets.
-            * parents: skeleton hierarchical structure.
-            * joints_left: left joints indices.
-            * joints_right: rights joints inidices.
-        Output
-        ------
-            None
-        """
-
-        # save data
-        self.quaternions = data['quaternions'].copy()
-        self.trajectory = data['trajectory'].copy()
-
-        # - number of frames / number of joints -
-        self.n_frames = self.quaternions.shape[0]
-        self.n_joints = self.quaternions.shape[1]
-        # ---------------------------------------
-
-        # skeleton parameters
-        self.offsets = offsets.copy()
-        self.parents = parents
-        self.joints_left = joints_left
-        self.joints_right = joints_right
-        self.compute_has_children()
-    
-    def compute_children(self):
-        """
-        Compute children object attribute
-        """
-        self.children = [[]] * self.n_joints
-        for joint in range(self.n_joints):
-            self.children
+from skeleton import Skeleton
+from prepare_data import data
 
 
-    
-    def compute_has_children(self):
-        """
-        Compute has_children object attribute.
-        """
-        self.has_children = [False] * self.n_joints
-        for joint in self.parents:
-            self.has_children[joint] = True
-    
-
-def compute_positions(self, root, q, p):
+def plot_frame(skeleton, frame, name = 'show'):
     """
-    Recursive function to compute world positions.
+    Plot skeleton configuration in a frame.
     Input
     -----
-        * root : root index.
-        * q : root rotation as quaternion.
-        * p : root position as vector.
+        * skeleton : Skeleton object
+        * frame    : frame index
+        * name     : name to save figure (if 'show' figure displayed).
+    Output
+    ------
+        None
+    """
+    
+    # heuristic from https://github.com/facebookresearch/QuaterNet.
+    radius = np.max( skeleton.offsets.squeeze() ) * 10
+
+    print(radius)
+
+    # create figure
+    fig = plt.figure( figsize = (6,6) )
+    ax = plt.axes( projection = '3d' )
+
+    # parameters
+    ax.view_init( elev = 20.0 , azim = 30.0 )
+    ax.set_xlim3d( [ -radius/2, radius/2 ] )
+    ax.set_zlim3d( [ -radius/2, radius/2 ] )
+    ax.set_ylim3d( [ -radius/2, radius/2 ] )
+    ax.set_aspect('equal')
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+    
+    for j in range( 1, skeleton.n_joints ):
+        
+        if skeleton.children[j]:
+            
+            # select color
+            c = 'r' if j in joints_right else 'k'
+            
+            # plot joint
+            plt.plot( skeleton.positions[frame, j,0], skeleton.positions[frame, j,1] ,
+                      skeleton.positions[frame, j,2], 'o', c  = c, markersize = 1 , zdir = 'y' )
+
+            # plot segment
+            plt.plot( [ skeleton.positions[ frame, skeleton.parents[j], 0], skeleton.positions[ frame, j, 0] ] ,
+	                  [ skeleton.positions[ frame, skeleton.parents[j], 1], skeleton.positions[ frame, j, 1] ] ,
+                      [ skeleton.positions[ frame, skeleton.parents[j], 2], skeleton.positions[ frame, j, 2] ] ,
+                      c  = c , linewidth = 1.0 , zdir = 'y' )
+            
+    plt.tight_layout()
+
+    if name == 'show':
+        plt.show()
+    else :
+        plt.savefig()
+
+
+def animation(skeleton, fps, name = 'show', bitrate = 1000):
+    """
+    Render or show an animation.
+    Input
+    -----
+        * skeleton : Skeleton object.
+        * fps  : frame rate (frames per second).
+        * name : output file name
+                 The supported output modes are:
+                    - 'show' : display an interactive figure.
+                    - 'html' : HTML5 video.
+                    - 'mp4'  : h264 video (requires ffmpeg).
+                    - 'gif'  : gif file (requires imagemagick).
+        * bitrate : ...
     Output
     ------
         None
     """
 
+    x = 0
+    y = 1
+    z = 2
+
     
+    # heuristic from https://github.com/facebookresearch/QuaterNet.
+    radius = np.max( skeleton.offsets.squeeze() ) * 10
+    
+    skeleton_parents = skeleton.parents
 
+    # Figure parameters
+    plt.ioff()
 
-"""
-    def compute_positions(self):
+    fig = plt.figure( figsize = (6, 6) )
+    ax = fig.add_subplot( 1, 1, 1, projection = '3d' )
+    ax.view_init( elev = 20.0, azim = 30.0 )
+    ax.set_xlim3d([-radius/2, radius/2])
+    ax.set_zlim3d([0, radius])
+    ax.set_ylim3d([-radius/2, radius/2])
+    ax.set_aspect('equal')
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+    # ax.dist = 7.5
+
+    lines = []
+    markers = []
+    initialized = False
+    
+    camera_pos = skeleton.trajectory
+    data = skeleton.positions.copy()
+    height_offset = np.min( data[:, :, 1].squeeze() ) 
+    data = skeleton.positions.copy()
+    data[:, :, 1] -= height_offset
+    
+    def update(frame):
+        nonlocal initialized
         
-        Compute world positions with forward kinematics.
+        ax.set_xlim3d([-radius/2 + camera_pos[frame, 0], radius/2 + camera_pos[frame, 0]])
+        ax.set_ylim3d([-radius/2 + camera_pos[frame, 1], radius/2 + camera_pos[frame, 1]])
+
+        positions_world = data[frame]
         
+        for j in range(positions_world.shape[0]):
+            
+            if skeleton_parents[j] == -1:
+                continue
 
-        n_frames = self.quaternions.shape[0]
-        n_joints = self.quaternions.shape[1]
+            if not initialized:
+                
+                c = 'r' if j in skeleton.joints_right else 'b'
 
-        # world positions
-        p = np.zeros( (n_frames, n_joints, 3) )
+                # plot joint
+                #markers.append( ax.plot( positions_world[j,x], positions_world[j,y] ,
+                #                         positions_world[j,z], 'o', c  = c, markersize = 1 , zdir = 'y' ) )
+                
+                # plot segment
+                lines.append( ax.plot( [ positions_world[j, x], positions_world[skeleton_parents[j], x] ],
+                                       [ positions_world[j, y], positions_world[skeleton_parents[j], y] ],
+                                       [ positions_world[j, z], positions_world[skeleton_parents[j], z] ],
+                                       zdir = 'y', c = c) )
 
-        # the first joint is the root 
-        p[:,0,:] = self.trajectory
+            else:
+                lines[j-1][0].set_xdata([positions_world[j, x], positions_world[skeleton_parents[j], x]])
+                lines[j-1][0].set_ydata([positions_world[j, y], positions_world[skeleton_parents[j], y]])
+                lines[j-1][0].set_3d_properties( [ positions_world[j, z], positions_world[skeleton_parents[j],z] ], zdir='y')
 
-        for joint in range(1,n_joints):
+        #l = max(frame - draw_offset, 0)
+        #r = min(frame+draw_offset, trajectory.shape[0])
+        #spline_line.set_xdata(trajectory[l:r, 0])
+        #spline_line.set_ydata(np.zeros_like(trajectory[l:r, 0]))
+        #spline_line.set_3d_properties(trajectory[l:r, 1], zdir='y')
+        
+        initialized = True
 
-            parent  = self.parents[joint]
-            l = []
-            while parent != -1:
-                l.append(parent)
-                parent = self.parents[parent]
-            l = l[:-1]
-
-            r = self.quaternions[:,0,:]
-            if len(r):
-                for i in reversed(l):
-                    r = quaternion_product( r, self.quaternions[:,i,:] )
-
-            p[:,joint,:] = p[:,self.parents[joint],:] + quaterion_rotation( r,
-                           np.repeat( np.expand_dims( self.offsets[joint,:], axis = 0),
-                           n_frames, axis = 0) )
-            print(self.parents[joint], joint)
-"""
-
+        if name == 'show' and frame == data.shape[0] - 1:
+            plt.close('all')
+    
+    
+    fig.tight_layout()
+    anim = FuncAnimation(fig, update, frames = np.arange(0, data.shape[0]), interval = 1000/fps, repeat = False)
+    if name == 'show':
+        plt.show()
+        return anim
+    """
+    elif output == 'html':
+        return anim.to_html5_video()
+    elif output.endswith('.mp4'):
+        Writer = writers['ffmpeg']
+        writer = Writer(fps=fps, metadata={}, bitrate=bitrate)
+        anim.save(output, writer=writer)
+    elif output.endswith('.gif'):
+        anim.save(output, dpi=80, writer='imagemagick')
+    else:
+        raise ValueError('Unsupported output format (only html, .mp4, and .gif are supported)')
+    plt.close()
+    """
 
 
 offsets = [ [   0.      ,    0.      ,    0.      ],
@@ -140,6 +214,7 @@ offsets = [ [   0.      ,    0.      ,    0.      ],
             [   0.      ,    0.      ,   99.999888],
             [   0.      ,  137.499922,    0.      ],
             [   0.      ,    0.      ,    0.      ] ]
+
 offsets = np.array(offsets)
 
 parents = [ -1,  0,  1,  2,  3,  4,  0,  6,  7,  8, 
@@ -150,45 +225,14 @@ parents = [ -1,  0,  1,  2,  3,  4,  0,  6,  7,  8,
 joints_left = [ 1, 2, 3, 4, 5, 24, 25, 26, 27, 28, 29, 30, 31 ]
 joints_right = [ 6, 7, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23 ]
 
-"""
-for subject in data.keys():
 
-    print('subject: ' + subject)
-
-    for action in data[subject].keys():
-        print('  action: ' + action )
-        print( '    trajectory: ', data[subject][action]['trajectory'].shape   ,
-               '    quaternions: ', data[subject][action]['quaternions'].shape )
-
-    print()
-"""
-
-s = Skeleton( data    = data['S1']['walking_1'],
+s = Skeleton( data    = data['S1']['walking_2'],
               offsets = offsets                   ,
               parents = parents                   ,
               joints_left  = joints_left          ,
               joints_right = joints_right         )
 
-# s.compute_positions()
+if __name__ == '__main__':
 
-# pp = s.positions[500,:,:]
-
-"""
-fig = plt.figure( figsize = (9,6) )
-ax = plt.axes( projection = '3d' )
-ax.set_xlabel('x'), ax.set_ylabel('-z'), ax.set_zlabel('y')
-ax.set_xlim([-1000, 1000]), ax.set_ylim([-1000, 1000]), ax.set_zlim([-1000, 1000])
-
-plt.plot(pp[0,0], -pp[0,2], pp[0,1], 'o', c = 'k', markersize = 3)
-
-for i in range(1, pp.shape[0]):
-    plt.plot( pp[i,0], -pp[i,2],
-	          pp[i,1], 'o', c  = 'k', markersize = 3)
-    plt.plot( [pp[parents[i], 0], pp[i, 0]]    ,
-	          [-pp[parents[i], 2], -pp[i, 2] ] ,
-	          [pp[parents[i], 1], pp[i, 1] ]   ,
-	          c  = 'k', linewidth = 0.5        )
-
-plt.tight_layout()
-plt.show()
-"""
+    #plot_frame(s, 500)
+    animation(s, fps = 60 )
